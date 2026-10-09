@@ -1,0 +1,66 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.exalted.vk640cursor"
+    compileSdk 34
+    ndkVersion "26.1.10909125"
+
+    defaultConfig {
+        applicationId "com.exalted.vk640cursor"
+        minSdk 26
+        targetSdk 33
+        versionCode 3
+        versionName "2.0"
+    }
+
+    buildFeatures { aidl true }
+
+    // Sabit anahtar: her derlemede ayni imza, ust uste kurulabilir.
+    signingConfigs {
+        main {
+            storeFile file("../vk640.keystore")
+            storePassword "vk640vk640"
+            keyAlias "vk640"
+            keyPassword "vk640vk640"
+        }
+    }
+    buildTypes {
+        release { signingConfig signingConfigs.main; minifyEnabled false }
+        debug   { signingConfig signingConfigs.main }
+    }
+
+    // Surucu (calistirilabilir dosya) lib*.so adiyla gelir ve diske cikarilir.
+    packaging { jniLibs { useLegacyPackaging = true } }
+    sourceSets { main { jniLibs.srcDir layout.buildDirectory.dir("vkbin") } }
+}
+
+dependencies {
+    implementation "dev.rikka.shizuku:api:13.1.5"
+    implementation "dev.rikka.shizuku:provider:13.1.5"
+}
+
+// vk640_uhid.c dosyasini NDK clang ile derleyip lib/<abi>/libvk640_uhid.so olarak paketler.
+def vkAbis = ["arm64-v8a": "aarch64-linux-android26", "armeabi-v7a": "armv7a-linux-androideabi26"]
+tasks.register("buildVkBinary") {
+    def src = file("src/main/c/vk640_uhid.c")
+    def outDir = layout.buildDirectory.dir("vkbin")
+    inputs.file(src)
+    outputs.dir(outDir)
+    doLast {
+        def os = System.getProperty("os.name").toLowerCase()
+        def tag = os.contains("win") ? "windows-x86_64" : (os.contains("mac") ? "darwin-x86_64" : "linux-x86_64")
+        def ext = os.contains("win") ? ".cmd" : ""
+        def ndk = android.ndkDirectory
+        vkAbis.each { abi, triple ->
+            def out = new File(outDir.get().asFile, "${abi}/libvk640_uhid.so")
+            out.parentFile.mkdirs()
+            def clang = new File(ndk, "toolchains/llvm/prebuilt/${tag}/bin/${triple}-clang${ext}")
+            project.exec {
+                commandLine clang.absolutePath, "-O2", "-o", out.absolutePath, src.absolutePath, "-lm"
+            }
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn "buildVkBinary" }
