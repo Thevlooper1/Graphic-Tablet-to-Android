@@ -11,15 +11,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
+      # DUZELTME: setup-android varsayilan olarak artik var olmayan "tools" paketini
+      # kurmaya calisiyor ve "Failed to find package 'tools'" ile cokuyor.
+      # packages: '' ile bu adim sadece sdkmanager'i hazirlar; paketleri asagida kuruyoruz.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+          log-accepted-android-sdk-licenses: false
+
       - name: SDK ve NDK
         run: |
           yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125"
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;26.1.10909125"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
