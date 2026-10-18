@@ -8,11 +8,6 @@ import java.io.InputStream;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Shizuku "kullanici servisi": shell (uid 2000) yetkisiyle ayri bir surecte calisir.
- * Surucuyu (vk640_uhid) /data/local/tmp altina BAYT olarak yazar, setsid ile baslatir
- * ve Android 12+ hayalet surec katilini (Phantom Process Killer) devre disi birakarak korur.
- */
 public class VkUserService extends IVkService.Stub {
     private static final String L = "/data/local/tmp";
 
@@ -84,14 +79,8 @@ public class VkUserService extends IVkService.Stub {
         if (rot == null || !rot.matches("auto|0|90|180|270")) rot = "auto";
         if (bin == null || bin.length < 1000) return "HATA: surucu baytlari bos/eksik (" + (bin == null ? 0 : bin.length) + ")";
 
-        String oldRot = sh("cat " + L + "/vk640.rot 2>/dev/null", 2000).trim();
-        byte[] cur = readFile(L + "/vk640_uhid");
-        if (cur != null && Arrays.equals(cur, bin) && oldRot.equals(rot) && alive()) {
-            return status();
-        }
-
         sh("pkill -f '[v]k640_run'; pkill -f '[v]k640_uhid'", 5000);
-        sleep(700);
+            sleep(700);
 
         try {
             writeFile(L + "/vk640_uhid.new", bin);
@@ -103,22 +92,26 @@ public class VkUserService extends IVkService.Stub {
         }
 
         try {
-            String script = "#!/system/bin/sh\nwhile :; do " + L + "/vk640_uhid -r " + rot
-                    + " >>" + L + "/vk640.log 2>&1; sleep 2; done\n";
+            // Termux ortami gibi direkt calismasi icin nohup ve acik komut yapisi
+            String script = "#!/system/bin/sh\n"
+                    + "cd " + L + "\n"
+                    + "while :; do\n"
+                    + "  ./vk640_uhid -r " + rot + " >> " + L + "/vk640.log 2>&1\n"
+                    + "  sleep 1\n"
+                    + "done\n";
             writeFile(L + "/vk640_run.sh", script.getBytes());
             writeFile(L + "/vk640.rot", rot.getBytes());
         } catch (Throwable t) {
             return "HATA: dongu betigi yazilamadi: " + t + "\n" + diag();
         }
 
-        // Android 12+ Phantom Process Killer'i devre disi birak (arka plan surucusunun oldurulmesini onler)
         sh("device_config put activity_manager max_phantom_processes 2147483647 2>/dev/null", 2000);
-
         sh("chmod 755 " + L + "/vk640_run.sh; : > " + L + "/vk640.log", 4000);
-        sh("setsid " + L + "/vk640_run.sh >/dev/null 2>&1 </dev/null &", 5000);
 
-        // Surucunun baslayip baslamadigini dogrulamak icin 3 saniye bekle
-        sleep(3000);
+        // Termux'taki calisma mantigina birebir benzetildi (nohup ile arka plana atma)
+        sh("nohup " + L + "/vk640_run.sh >/dev/null 2>&1 &", 5000);
+
+        sleep(2000);
         if (!alive()) {
             return "UYARI: surucu baslamadi ya da hemen cikti.\n" + status();
         }
